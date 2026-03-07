@@ -4,21 +4,48 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#eef3fa" />
     <title>Air Force Barracks Portal</title>
+    <script>
+      (function applyInitialTheme() {
+        var preferenceKey = 'appThemePreference';
+        var legacyKey = 'appTheme';
+        var valid = { light: true, dark: true, system: true };
+        var savedPreference = localStorage.getItem(preferenceKey) || localStorage.getItem(legacyKey) || 'system';
+        var preference = valid[savedPreference] ? savedPreference : 'system';
+        var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var resolvedTheme = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference;
+
+        var root = document.documentElement;
+        root.setAttribute('data-theme-preference', preference);
+        root.setAttribute('data-theme', resolvedTheme);
+        root.style.colorScheme = resolvedTheme;
+      })();
+    </script>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
+      :root {
+        color-scheme: light dark;
       }
+
+      html,
       body {
-        background-color: #f5f5f5;
-        color: #333;
-        font-family: Arial, sans-serif;
+        margin: 0;
+        min-height: 100%;
       }
+
       #root {
         min-height: 100vh;
-        background-color: #ffffff;
+      }
+
+      html[data-theme='light'] body {
+        background-color: #eef3fa;
+        color: #0f172a;
+      }
+
+      html[data-theme='dark'] body {
+        background-color: #0b1220;
+        color: #f8fafc;
       }
     </style>
   </head>

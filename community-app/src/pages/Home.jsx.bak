@@ -1,0 +1,310 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { db } from "../firebase";
+import {
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  limit,
+  where
+} from "firebase/firestore";
+import Card, { CardHeader, CardBody } from "../components/ui/Card";
+import Button from "../components/ui/Button";
+import Badge from "../components/ui/Badge";
+import './Home.css';
+
+export default function Home() {
+  const { currentUser, userRole, isAdmin } = useAuth();
+  const [alerts, setAlerts] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalAlerts: 0,
+    activeAlerts: 0,
+    totalAnnouncements: 0,
+    totalEvents: 0,
+    upcomingEvents: 0
+  });
+
+  useEffect(() => {
+    if (!db) {
+      setLoading(false);
+      return;
+    }
+
+    async function fetchData() {
+      try {
+        // Fetch latest alerts
+        const alertsQuery = query(
+          collection(db, "alerts"),
+          where("status", "==", "active"),
+          orderBy("createdAt", "desc"),
+          limit(3)
+        );
+        const alertsSnapshot = await getDocs(alertsQuery);
+        const alertsData = alertsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setAlerts(alertsData);
+
+        // Fetch latest announcements
+        const announcementsQuery = query(
+          collection(db, "announcements"),
+          orderBy("createdAt", "desc"),
+          limit(3)
+        );
+        const announcementsSnapshot = await getDocs(announcementsQuery);
+        const announcementsData = announcementsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setAnnouncements(announcementsData);
+
+        // Fetch upcoming events
+        const eventsQuery = query(
+          collection(db, "events"),
+          orderBy("createdAt", "desc"),
+          limit(3)
+        );
+        const eventsSnapshot = await getDocs(eventsQuery);
+        const eventsData = eventsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setEvents(eventsData);
+
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  if (!db) {
+    return (
+      <div className="home-container">
+        <Card variant="warning" padding="lg">
+          <div className="firebase-config-notice">
+            <div className="notice-icon">⚙️</div>
+            <h2>Firebase Configuration Needed</h2>
+            <p>
+              Please add your Firebase configuration in <strong>src/firebase.js</strong>
+            </p>
+            <p className="notice-subtitle">
+              Currently showing placeholder values. Add your real Firebase credentials to see the portal.
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="home-container">
+      {/* Hero Section */}
+      <div className="hero-section">
+        <div className="hero-content">
+          <h1 className="hero-title">
+            Welcome to Airforce Barracks
+          </h1>
+          <p className="hero-subtitle">
+            Stay informed with the latest alerts, announcements, and community events
+          </p>
+        </div>
+        
+        {/* Quick Stats */}
+        <div className="quick-stats">
+          <div className="stat-card">
+            <div className="stat-icon">🚨</div>
+            <div className="stat-content">
+              <h3 className="stat-number">{alerts.length}</h3>
+              <p className="stat-label">Active Alerts</p>
+            </div>
+          </div>
+          
+          <div className="stat-card">
+            <div className="stat-icon">📢</div>
+            <div className="stat-content">
+              <h3 className="stat-number">{announcements.length}</h3>
+              <p className="stat-label">Announcements</p>
+            </div>
+          </div>
+          
+          <div className="stat-card">
+            <div className="stat-icon">📅</div>
+            <div className="stat-content">
+              <h3 className="stat-number">{events.length}</h3>
+              <p className="stat-label">Upcoming Events</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Sections */}
+      <div className="dashboard-sections">
+        {/* Alerts Section */}
+        <section className="dashboard-section">
+          <div className="section-header">
+            <div className="section-title-wrapper">
+              <h2 className="section-title">
+                <span className="section-icon">🚨</span>
+                Latest Alerts
+              </h2>
+              <p className="section-subtitle">Critical updates and emergency notifications</p>
+            </div>
+            <Link to="/alerts">
+              <Button variant="ghost" size="sm">View All →</Button>
+            </Link>
+          </div>
+
+          <div className="content-grid">
+            {loading ? (
+              <div className="loading-state">
+                <div className="loading-spinner"></div>
+                <p>Loading alerts...</p>
+              </div>
+            ) : alerts.length > 0 ? (
+              alerts.map(alert => (
+                <Card key={alert.id} hover padding="lg" className="alert-preview-card">
+                  <div className="alert-preview-header">
+                    <Badge variant={alert.severity}>{alert.severity?.toUpperCase()}</Badge>
+                    <span className="alert-date">{new Date(alert.date).toLocaleDateString()}</span>
+                  </div>
+                  <h3 className="preview-card-title">{alert.title}</h3>
+                  <p className="preview-card-text">{alert.message}</p>
+                </Card>
+              ))
+            ) : (
+              <Card padding="lg">
+                <div className="empty-state">
+                  <span className="empty-icon">📭</span>
+                  <p>No active alerts at the moment</p>
+                </div>
+              </Card>
+            )}
+          </div>
+        </section>
+
+        {/* Announcements Section */}
+        <section className="dashboard-section">
+          <div className="section-header">
+            <div className="section-title-wrapper">
+              <h2 className="section-title">
+                <span className="section-icon">📢</span>
+                Recent Announcements
+              </h2>
+              <p className="section-subtitle">Community news and updates</p>
+            </div>
+            <Link to="/announcements">
+              <Button variant="ghost" size="sm">View All →</Button>
+            </Link>
+          </div>
+
+          <div className="content-grid">
+            {loading ? (
+              <div className="loading-state">
+                <div className="loading-spinner"></div>
+                <p>Loading announcements...</p>
+              </div>
+            ) : announcements.length > 0 ? (
+              announcements.map(announcement => (
+                <Card key={announcement.id} hover padding="lg">
+                  <h3 className="preview-card-title">{announcement.title}</h3>
+                  <p className="preview-card-text">{announcement.message}</p>
+                  <div className="preview-card-footer">
+                    <span className="preview-card-date">
+                      {announcement.createdAt?.toDate?.().toLocaleDateString() || 'Recent'}
+                    </span>
+                  </div>
+                </Card>
+              ))
+            ) : (
+              <Card padding="lg">
+                <div className="empty-state">
+                  <span className="empty-icon">📭</span>
+                  <p>No announcements yet</p>
+                </div>
+              </Card>
+            )}
+          </div>
+        </section>
+
+        {/* Events Section */}
+        <section className="dashboard-section">
+          <div className="section-header">
+            <div className="section-title-wrapper">
+              <h2 className="section-title">
+                <span className="section-icon">📅</span>
+                Upcoming Events
+              </h2>
+              <p className="section-subtitle">Community events and activities</p>
+            </div>
+            <Link to="/events">
+              <Button variant="ghost" size="sm">View All →</Button>
+            </Link>
+          </div>
+
+          <div className="content-grid">
+            {loading ? (
+              <div className="loading-state">
+                <div className="loading-spinner"></div>
+                <p>Loading events...</p>
+              </div>
+            ) : events.length > 0 ? (
+              events.map(event => (
+                <Card key={event.id} hover padding="lg">
+                  <div className="event-preview-header">
+                    <Badge variant="info">📍 {event.location}</Badge>
+                  </div>
+                  <h3 className="preview-card-title">{event.title}</h3>
+                  <div className="event-preview-details">
+                    <span className="event-detail">
+                      <strong>Date:</strong> {event.date}
+                    </span>
+                    <span className="event-detail">
+                      <strong>Time:</strong> {event.time}
+                    </span>
+                  </div>
+                </Card>
+              ))
+            ) : (
+              <Card padding="lg">
+                <div className="empty-state">
+                  <span className="empty-icon">📭</span>
+                  <p>No upcoming events</p>
+                </div>
+              </Card>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Call to Action */}
+      <div className="cta-section">
+        <Card variant="gradient" padding="lg">
+          <div className="cta-content">
+            <h2 className="cta-title">Ready to get involved?</h2>
+            <p className="cta-subtitle">
+              Join our community and stay connected with everything happening at the barracks
+            </p>
+            <div className="cta-actions">
+              <Link to="/announcements">
+                <Button variant="secondary" size="lg">View Announcements</Button>
+              </Link>
+              <Link to="/events">
+                <Button variant="secondary" size="lg">Browse Events</Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}

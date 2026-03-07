@@ -6,21 +6,24 @@ import {
   query,
   orderBy
 } from "firebase/firestore";
+import Card from "../components/ui/Card";
+import Badge from "../components/ui/Badge";
+import { CalendarDays, Inbox, Megaphone, UserCircle2 } from "lucide-react";
+import { mockAnnouncements } from "../utils/mockData";
+import './Pages.css';
 
 export default function Announcements() {
-  const [announcements, setAnnouncements] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  if (!db) {
-    return (
-      <div style={{ padding: "20px", textAlign: "center", backgroundColor: "#fff3cd", color: "#333" }}>
-        <h2 style={{ color: "#d32f2f" }}>⚙️ Firebase Configuration Needed</h2>
-        <p>Please configure Firebase in src/firebase.js to load announcements.</p>
-      </div>
-    );
-  }
+  const [announcements, setAnnouncements] = useState(mockAnnouncements);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Use mock data instantly if Firebase is not configured
+    if (!db) {
+      return;
+    }
+
+  setLoading(true);
+
     async function fetchAnnouncements() {
       try {
         const q = query(
@@ -35,9 +38,11 @@ export default function Announcements() {
           ...doc.data()
         }));
 
-        setAnnouncements(data);
+        setAnnouncements(data.length > 0 ? data : mockAnnouncements);
       } catch (error) {
         console.error("Error fetching announcements:", error);
+        // Fall back to mock data on error
+        setAnnouncements(mockAnnouncements);
       } finally {
         setLoading(false);
       }
@@ -47,35 +52,67 @@ export default function Announcements() {
   }, []);
 
   if (loading) {
-    return <p style={{ padding: "20px" }}>Loading announcements...</p>;
+    return (
+      <div className="page-container">
+        <div className="loading-state">
+          <div className="loading-spinner"></div>
+          <p>Loading announcements...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div style={{ padding: "20px", maxWidth: "700px", margin: "auto" }}>
-      <h1>📢 Announcements - Airforce Barracks</h1>
+    <div className="page-container">
+      {/* Page Header */}
+      <div className="page-header">
+        <div className="page-title-wrapper">
+          <h1 className="page-title">
+            <span className="page-icon"><Megaphone size={34} strokeWidth={2} /></span>
+            Announcements
+          </h1>
+          <p className="page-subtitle">
+            Stay updated with the latest community news and important updates
+          </p>
+        </div>
+        <Badge variant="primary" size="lg">{announcements.length} Total</Badge>
+      </div>
 
-      {announcements.length === 0 ? (
-        <p>No announcements available.</p>
-      ) : (
-        announcements.map(item => (
-          <div
-            key={item.id}
-            style={{
-              padding: "15px",
-              marginBottom: "15px",
-              borderRadius: "8px",
-              backgroundColor: "#f4f6f9",
-              borderLeft: "6px solid #003366"
-            }}
-          >
-            <h3>{item.title}</h3>
-            <p>{item.message}</p>
-            <small>
-              Posted: {item.date ? item.date : "Recent"}
-            </small>
-          </div>
-        ))
-      )}
+      {/* Announcements List */}
+      <div className="content-list">
+        {announcements.length === 0 ? (
+          <Card padding="lg">
+            <div className="empty-state">
+              <span className="empty-icon"><Inbox size={46} strokeWidth={2} /></span>
+              <h3>No Announcements</h3>
+              <p>There are no announcements at this time. Check back later!</p>
+            </div>
+          </Card>
+        ) : (
+          announcements.map(item => (
+            <Card key={item.id} hover padding="lg" className="announcement-card">
+              <div className="announcement-header">
+                <h3 className="announcement-title">{item.title}</h3>
+                <div className="announcement-badges">
+                  <Badge variant={item.priority === 'high' ? 'error' : item.priority === 'medium' ? 'warning' : 'info'} size="sm">
+                    {item.priority || 'info'}
+                  </Badge>
+                  <Badge variant="default" size="sm">{item.category || 'general'}</Badge>
+                </div>
+              </div>
+              <p className="announcement-message">{item.content}</p>
+              <div className="announcement-footer">
+                <span className="announcement-author">
+                  <UserCircle2 size={14} strokeWidth={2} /> {item.author || 'Admin'}
+                </span>
+                <span className="announcement-date">
+                  <CalendarDays size={14} strokeWidth={2} /> {item.createdAt instanceof Date ? item.createdAt.toLocaleDateString() : item.createdAt?.toDate?.().toLocaleDateString() || 'Recent'}
+                </span>
+              </div>
+            </Card>
+          ))
+        )}
+      </div>
     </div>
   );
 }
