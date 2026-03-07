@@ -28,7 +28,7 @@
 
 
 ## 📋 Table of Contents
-- [Preview](#️-preview)
+- [Preview](#-preview)
 
 - [Features](#-features)
 - [Quick Start](#-quick-start)
@@ -128,7 +128,30 @@ airforce-barracks-portal/
 └── README.md                    # Project documentation
 ```
 
-## � CI/CD & Deployment
+## 🧱 Tech Stack
+
+### Languages
+
+- **JavaScript (ES6+)**
+- **HTML5**
+- **CSS3**
+
+### Core Technologies
+
+- **React 18.2** - Component-based frontend UI
+- **React Router DOM 7.13** - Routing and navigation
+- **Firebase 12.10** - Authentication and data services
+- **Vite 5.4** - Fast development server and build tool
+
+### UI and Developer Tooling
+
+- **Framer Motion** - UI animations and transitions
+- **Lucide React** - Icon system
+- **Prettier** - Code formatting
+- **ESLint** - Code quality and linting
+- **GitHub Actions** - CI/CD automation and checks
+
+## 🚀 CI/CD & Deployment
 
 This project uses GitHub Actions for continuous integration and deployment:
 
