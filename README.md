@@ -10,11 +10,29 @@
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/okuntus/airforce-barracks-portal/badge)](https://securityscorecards.dev/viewer/?uri=github.com/okuntus/airforce-barracks-portal)
 
 > A modern, responsive web application designed for Airforce Barracks community management. Built with React, Vite, and Firebase for real-time data management and seamless user experience.
+## 🖼️ Preview
+
+<div align="center">
+   <img src="screenshots/login-page.png" alt="Login Page" width="800">
+   <p><em>Secure login portal with modern UI and demo mode for easy testing</em></p>
+</div>
+
+### ✨ Key Highlights
+
+- 🎨 **Modern UI Design** - Clean, professional interface with smooth animations
+- 🔐 **Secure Authentication** - Firebase-powered auth with demo mode for testing
+- 📱 **Fully Responsive** - Optimized for all devices and screen sizes
+- ⚡ **Fast & Efficient** - Built with Vite for optimal performance
+- 🌙 **Dark Mode Support** - Automatic theme switching for user comfort
+- ♿ **Accessible** - WCAG compliant with ARIA labels and keyboard navigation
+
 
 ## 📋 Table of Contents
+- [Preview](#️-preview)
 
 - [Features](#-features)
 - [Quick Start](#-quick-start)
+- [Demo Mode](#-demo-mode)
 - [Project Structure](#-project-structure)
 - [Tech Stack](#-tech-stack)
 - [Configuration](#-configuration)
@@ -68,6 +86,19 @@
 
 5. **Open your browser**
    - Navigate to `http://localhost:5173`
+## 🧪 Demo Mode
+
+The application includes a built-in demo mode for easy testing without Firebase configuration:
+
+### Demo Accounts
+
+| Role  | Email | Password | Access Level |
+|-------|-------|----------|--------------|
+| 👤 **User** | `user@demo.com` | `password` | View announcements, events, and alerts |
+| 👨‍💼 **Admin** | `admin@demo.com` | `password` | Full administrative access + content management |
+
+> **Note:** Demo mode is automatically enabled when Firebase credentials are not configured. Simply click on the demo account buttons on the login page to auto-fill credentials and test the application.
+
 
 ## 📁 Project Structure
 
