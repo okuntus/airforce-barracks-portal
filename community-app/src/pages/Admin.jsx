@@ -1,933 +1,738 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Navigate } from "react-router-dom";
-import { db } from "../firebase";
-import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  getDocs,
-  query,
-  orderBy,
-  limit,
-  deleteDoc,
-  doc
-} from "firebase/firestore";
 import Card, { CardHeader, CardBody } from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
 import { Input, Textarea, Select } from "../components/ui/Input";
+import { alertsApi, eventsApi, announcementsApi, statsApi, usersApi } from "../services/api";
 import {
-  Activity,
-  AlertTriangle,
-  BellRing,
-  CalendarDays,
-  CheckCircle2,
-  Info,
-  LayoutDashboard,
-  Megaphone,
-  Settings2,
-  ShieldAlert,
-  ShieldCheck,
-  UserCog,
-  Users,
-  Wrench
+  Activity, AlertTriangle, CalendarDays, CheckCircle2, LayoutDashboard,
+  Megaphone, Pencil, Plus, Settings2, ShieldAlert, ShieldCheck,
+  Trash2, UserPlus, Users, X, RefreshCw, Mail, Crown, User
 } from "lucide-react";
-import { mockAdminData } from "../utils/mockData";
 import "./Admin.css";
 
-function formatDate(value) {
-  if (!value) return "N/A";
-  const dateObj = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(dateObj.getTime()) ? "N/A" : dateObj.toLocaleString();
+const fmt = (v) => { if (!v) return "N/A"; const d = new Date(v); return isNaN(d.getTime()) ? "N/A" : d.toLocaleString(); };
+const fmtDate = (v) => { if (!v) return ""; const d = new Date(v); return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10); };
+
+const TABS = [
+  { key: "dashboard",     icon: <LayoutDashboard size={16} />, label: "Dashboard" },
+  { key: "users",         icon: <Users size={16} />,           label: "Users" },
+  { key: "alerts",        icon: <ShieldAlert size={16} />,     label: "Alerts" },
+  { key: "events",        icon: <CalendarDays size={16} />,    label: "Events" },
+  { key: "announcements", icon: <Megaphone size={16} />,       label: "Announcements" },
+  { key: "settings",      icon: <Settings2 size={16} />,       label: "Settings" },
+];
+
+// Stable toast hook — avoids stale closure issues
+function useToast() {
+  const [toast, setToast] = useState(null);
+  const timerRef = useRef(null);
+  const show = useCallback((type, msg) => {
+    clearTimeout(timerRef.current);
+    setToast({ type, msg });
+    timerRef.current = setTimeout(() => setToast(null), type === 'error' ? 5000 : 4000);
+  }, []);
+  const showSuccess = useCallback((msg) => show('success', msg), [show]);
+  const showError   = useCallback((msg) => show('error',   msg), [show]);
+  return { toast, setToast, showSuccess, showError };
 }
 
 export default function Admin() {
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading, currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+  const { toast, setToast, showSuccess, showError } = useToast();
 
-  if (loading) {
-    return (
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "60vh",
-        fontSize: "18px"
-      }}>
-        <div>Loading...</div>
-      </div>
-    );
-  }
+  if (loading) return <div className="admin-loading"><div className="admin-spinner" /></div>;
+  if (!isAdmin()) return <Navigate to="/" replace />;
 
-  if (!isAdmin()) {
-    return <Navigate to="/" replace />;
-  }
-
-  const showSuccess = (message) => {
-    setSuccessMessage(message);
-    setErrorMessage("");
-    setTimeout(() => setSuccessMessage(""), 5000);
-  };
-
-  const showError = (message) => {
-    setErrorMessage(message);
-    setSuccessMessage("");
-    setTimeout(() => setErrorMessage(""), 5000);
-  };
+  // currentUser.uid is set from user.id in AuthContext login
+  const currentUserId = currentUser?.uid;
 
   return (
     <div className="admin-container">
-      {/* Admin Header with Role Badge */}
-      <div className="admin-header-section">
-        <div className="admin-header-content">
-          <h1><ShieldCheck size={24} strokeWidth={2} /> Administration Panel</h1>
-          <p className="admin-subtitle">Manage community content and system settings</p>
-          <Badge variant="primary" size="lg">Administrator Access</Badge>
+      <div className="admin-hero">
+        <div className="admin-hero-content">
+          <div className="admin-hero-icon"><ShieldCheck size={32} strokeWidth={1.5} /></div>
+          <div>
+            <h1 className="admin-hero-title">Administration Panel</h1>
+            <p className="admin-hero-sub">Manage users, content, and system settings</p>
+          </div>
         </div>
+        <Badge variant="primary" size="lg">Administrator</Badge>
       </div>
 
-      {/* Notification Messages */}
-      {successMessage && (
-        <div className="notification success">
-          <CheckCircle2 size={18} strokeWidth={2} />
-          <span>{successMessage}</span>
-        </div>
-      )}
-      {errorMessage && (
-        <div className="notification error">
-          <AlertTriangle size={18} strokeWidth={2} />
-          <span>{errorMessage}</span>
+      {toast && (
+        <div className={`admin-toast admin-toast-${toast.type}`}>
+          {toast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+          <span>{toast.msg}</span>
+          <button className="toast-close" onClick={() => setToast(null)}><X size={14} /></button>
         </div>
       )}
 
-      {/* Tab Navigation */}
       <div className="admin-tabs">
-        <button
-          className={`admin-tab ${activeTab === "dashboard" ? "active" : ""}`}
-          onClick={() => setActiveTab("dashboard")}
-        >
-          <span className="tab-icon"><LayoutDashboard size={16} strokeWidth={2} /></span>
-          Dashboard
-        </button>
-        <button
-          className={`admin-tab ${activeTab === "alerts" ? "active" : ""}`}
-          onClick={() => setActiveTab("alerts")}
-        >
-          <span className="tab-icon"><ShieldAlert size={16} strokeWidth={2} /></span>
-          Alerts
-        </button>
-        <button
-          className={`admin-tab ${activeTab === "events" ? "active" : ""}`}
-          onClick={() => setActiveTab("events")}
-        >
-          <span className="tab-icon"><CalendarDays size={16} strokeWidth={2} /></span>
-          Events
-        </button>
-        <button
-          className={`admin-tab ${activeTab === "announcements" ? "active" : ""}`}
-          onClick={() => setActiveTab("announcements")}
-        >
-          <span className="tab-icon"><Megaphone size={16} strokeWidth={2} /></span>
-          Announcements
-        </button>
-        <button
-          className={`admin-tab ${activeTab === "settings" ? "active" : ""}`}
-          onClick={() => setActiveTab("settings")}
-        >
-          <span className="tab-icon"><Settings2 size={16} strokeWidth={2} /></span>
-          Settings
-        </button>
+        {TABS.map(({ key, icon, label }) => (
+          <button key={key} className={`admin-tab ${activeTab === key ? "active" : ""}`} onClick={() => setActiveTab(key)}>
+            <span className="tab-icon">{icon}</span>
+            <span className="tab-label">{label}</span>
+          </button>
+        ))}
       </div>
 
-      {/* Tab Content */}
       <div className="admin-content">
-        {activeTab === "dashboard" && <AdminDashboardTab showError={showError} />}
-        {activeTab === "alerts" && <AlertsTab showSuccess={showSuccess} showError={showError} />}
-        {activeTab === "events" && <EventsTab showSuccess={showSuccess} showError={showError} />}
+        {activeTab === "dashboard"     && <DashboardTab showError={showError} />}
+        {activeTab === "users"         && <UsersTab showSuccess={showSuccess} showError={showError} currentUserId={currentUserId} />}
+        {activeTab === "alerts"        && <AlertsTab showSuccess={showSuccess} showError={showError} />}
+        {activeTab === "events"        && <EventsTab showSuccess={showSuccess} showError={showError} />}
         {activeTab === "announcements" && <AnnouncementsTab showSuccess={showSuccess} showError={showError} />}
-        {activeTab === "settings" && <SettingsTab />}
+        {activeTab === "settings"      && <SettingsTab />}
       </div>
     </div>
   );
 }
 
-// Admin Dashboard Tab
-function AdminDashboardTab({ showError }) {
-  const [stats, setStats] = useState(mockAdminData.stats);
-  const [dashboardLoading, setLoading] = useState(false);
+// ── Dashboard ──────────────────────────────────────────────────────────────
+function DashboardTab({ showError }) {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!db) {
-      setStats(mockAdminData.stats);
-      setLoading(false);
-      return;
-    }
-
+  const load = useCallback(async () => {
     setLoading(true);
-
-    async function fetchStats() {
-      try {
-        const alertsSnap = await getDocs(collection(db, "alerts"));
-        const eventsSnap = await getDocs(collection(db, "events"));
-        const announcementsSnap = await getDocs(collection(db, "announcements"));
-
-        setStats({
-          totalAlerts: alertsSnap.size,
-          totalEvents: eventsSnap.size,
-          totalAnnouncements: announcementsSnap.size,
-          recentActivity: alertsSnap.size + eventsSnap.size + announcementsSnap.size
-        });
-      } catch (error) {
-        console.error("Error fetching admin stats:", error);
-        showError("Failed to load dashboard stats");
-      } finally {
-        setLoading(false);
-      }
+    setError(null);
+    try {
+      const data = await statsApi.get();
+      setStats(data);
+    } catch (err) {
+      setError(err.message || "Could not load stats.");
+      showError(err.message || "Could not load stats.");
+    } finally {
+      setLoading(false);
     }
-
-    fetchStats();
   }, [showError]);
 
-  if (dashboardLoading) {
-    return <div className="admin-loading">Loading dashboard...</div>;
-  }
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <div className="admin-loading"><div className="admin-spinner" /></div>;
+
+  if (error) return (
+    <div className="admin-tab-content">
+      <div className="tab-header"><h2><LayoutDashboard size={20} /> Dashboard Overview</h2></div>
+      <div className="admin-error-state">
+        <AlertTriangle size={32} />
+        <p>{error}</p>
+        <Button variant="primary" onClick={load}>Retry</Button>
+      </div>
+    </div>
+  );
+
+  const cards = [
+    { icon: <ShieldAlert size={24} />, value: stats?.activeAlerts ?? 0,      label: "Active Alerts",    color: "var(--color-error)" },
+    { icon: <Users size={24} />,       value: stats?.totalUsers ?? 0,         label: "Registered Users", color: "var(--color-primary)" },
+    { icon: <CalendarDays size={24} />,value: stats?.totalEvents ?? 0,        label: "Events",           color: "var(--color-success)" },
+    { icon: <Megaphone size={24} />,   value: stats?.totalAnnouncements ?? 0, label: "Announcements",    color: "var(--color-info)" },
+    { icon: <Activity size={24} />,    value: stats?.recentActivity ?? 0,     label: "Total Content",    color: "var(--color-warning)" },
+    { icon: <ShieldAlert size={24} />, value: stats?.totalAlerts ?? 0,        label: "Total Alerts",     color: "var(--color-text-tertiary)" },
+  ];
 
   return (
     <div className="admin-tab-content">
-      <h2><LayoutDashboard size={22} strokeWidth={2} /> Admin Dashboard</h2>
-      <div className="admin-stats-grid">
-        <Card variant="default" padding="lg">
-          <div className="admin-stat-card">
-            <div className="stat-icon large"><ShieldAlert size={28} strokeWidth={2} /></div>
-            <div className="stat-details">
-              <div className="stat-value">{stats?.totalAlerts || 0}</div>
-              <div className="stat-label">Total Alerts</div>
-            </div>
-          </div>
-        </Card>
-        <Card variant="default" padding="lg">
-          <div className="admin-stat-card">
-            <div className="stat-icon large"><CalendarDays size={28} strokeWidth={2} /></div>
-            <div className="stat-details">
-              <div className="stat-value">{stats?.totalEvents || 0}</div>
-              <div className="stat-label">Scheduled Events</div>
-            </div>
-          </div>
-        </Card>
-        <Card variant="default" padding="lg">
-          <div className="admin-stat-card">
-            <div className="stat-icon large"><Megaphone size={28} strokeWidth={2} /></div>
-            <div className="stat-details">
-              <div className="stat-value">{stats?.totalAnnouncements || 0}</div>
-              <div className="stat-label">Announcements</div>
-            </div>
-          </div>
-        </Card>
-        <Card variant="default" padding="lg">
-          <div className="admin-stat-card">
-            <div className="stat-icon large"><Activity size={28} strokeWidth={2} /></div>
-            <div className="stat-details">
-              <div className="stat-value">{stats?.recentActivity || 0}</div>
-              <div className="stat-label">Total Content</div>
-            </div>
-          </div>
-        </Card>
-        <Card variant="default" padding="lg">
-          <div className="admin-stat-card">
-            <div className="stat-icon large"><Users size={28} strokeWidth={2} /></div>
-            <div className="stat-details">
-              <div className="stat-value">{stats?.activeUsers || 0}</div>
-              <div className="stat-label">Active Users</div>
-            </div>
-          </div>
-        </Card>
-        <Card variant="default" padding="lg">
-          <div className="admin-stat-card">
-            <div className="stat-icon large"><Wrench size={28} strokeWidth={2} /></div>
-            <div className="stat-details">
-              <div className="stat-value">{stats?.pendingRequests || 0}</div>
-              <div className="stat-label">Pending Requests</div>
-            </div>
-          </div>
-        </Card>
+      <div className="tab-header">
+        <h2><LayoutDashboard size={20} /> Dashboard Overview</h2>
+        <button className="icon-action-btn" onClick={load} title="Refresh"><RefreshCw size={15} /></button>
       </div>
-
-      <Card variant="default" padding="lg" style={{ marginTop: "24px" }}>
-        <CardHeader>
-          <h3>System Information</h3>
-        </CardHeader>
-        <CardBody>
-          <div className="system-info">
-            <div className="info-row">
-              <span className="info-label">Portal Status</span>
-              <span className="info-value"><Badge variant="success">Operational</Badge></span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Database Status</span>
-              <span className="info-value">
-                {db ? (
-                  <Badge variant="success">Connected</Badge>
-                ) : (
-                  <Badge variant="warning">Demo Data Mode</Badge>
-                )}
-              </span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Admin Role</span>
-              <span className="info-value"><Badge variant="primary">Administrator</Badge></span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Last Updated</span>
-              <span className="info-value">{new Date().toLocaleString()}</span>
-            </div>
+      <div className="stats-grid-6">
+        {cards.map(({ icon, value, label, color }) => (
+          <div key={label} className="stat-tile">
+            <div className="stat-tile-icon" style={{ color }}>{icon}</div>
+            <div className="stat-tile-value">{value}</div>
+            <div className="stat-tile-label">{label}</div>
           </div>
-        </CardBody>
-      </Card>
-
-      <Card variant="default" padding="lg" style={{ marginTop: "24px" }}>
-        <CardHeader>
-          <h3>Recent Administrative Activity</h3>
-        </CardHeader>
-        <CardBody>
-          <div className="admin-items-list">
-            {mockAdminData.auditLogs.map((entry) => (
-              <div key={entry.id} className="info-row">
-                <span className="info-label">{entry.action}</span>
-                <span className="info-value">
-                  {entry.actor} | {formatDate(entry.createdAt)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </CardBody>
-      </Card>
+        ))}
+      </div>
+      <div className="info-card">
+        <h3>System Status</h3>
+        <div className="info-grid">
+          {[
+            ["Portal",   <Badge variant="success">Operational</Badge>],
+            ["Database", <Badge variant="success">Connected</Badge>],
+            ["Role",     <Badge variant="primary">Administrator</Badge>],
+            ["Updated",  new Date().toLocaleString()],
+          ].map(([k, v]) => (
+            <div key={k} className="info-row">
+              <span className="info-label">{k}</span>
+              <span className="info-value">{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-// Alerts Tab
-function AlertsTab({ showSuccess, showError }) {
-  const [alertTitle, setAlertTitle] = useState("");
-  const [alertMessage, setAlertMessage] = useState("");
-  const [alertSeverity, setAlertSeverity] = useState("medium");
-  const [alertDate, setAlertDate] = useState("");
-  const [alertErrors, setAlertErrors] = useState({});
-  const [recentAlerts, setRecentAlerts] = useState(mockAdminData.recentAlerts);
+// ── Users Tab ──────────────────────────────────────────────────────────────
+const EMPTY_USER = { email: "", password: "", displayName: "", rank: "Personnel", unit: "Community Member", role: "user", phone: "" };
 
-  useEffect(() => {
-    fetchRecentAlerts();
-  }, []);
+function UsersTab({ showSuccess, showError, currentUserId }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState(EMPTY_USER);
+  const [editingUser, setEditingUser] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [search, setSearch] = useState("");
 
-  const fetchRecentAlerts = async () => {
-    if (!db) {
-      setRecentAlerts(mockAdminData.recentAlerts);
-      return;
-    }
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setUsers(await usersApi.getAll()); }
+    catch (err) { showError(err.message || "Failed to load users."); }
+    finally { setLoading(false); }
+  }, [showError]);
 
-    try {
-      const q = query(
-        collection(db, "alerts"),
-        orderBy("createdAt", "desc"),
-        limit(5)
-      );
-      const snap = await getDocs(q);
-      setRecentAlerts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } catch (error) {
-      console.error("Error fetching alerts:", error);
-      showError("Failed to fetch recent alerts.");
-    }
-  };
+  useEffect(() => { load(); }, [load]);
 
-  const addAlert = async (e) => {
+  const filtered = users.filter(u =>
+    !search ||
+    u.email?.toLowerCase().includes(search.toLowerCase()) ||
+    u.display_name?.toLowerCase().includes(search.toLowerCase()) ||
+    u.unit?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleCreate = async (e) => {
     e.preventDefault();
-    setAlertErrors({});
-
-    const errors = {};
-    if (!alertTitle.trim()) errors.title = "Title is required";
-    if (!alertMessage.trim()) errors.message = "Message is required";
-    if (!alertDate) errors.date = "Date is required";
-
-    if (Object.keys(errors).length > 0) {
-      setAlertErrors(errors);
-      return;
-    }
-
-    const newAlert = {
-      id: `demo-alert-${Date.now()}`,
-      title: alertTitle.trim(),
-      message: alertMessage.trim(),
-      severity: alertSeverity,
-      date: alertDate,
-      status: "active",
-      createdAt: new Date()
-    };
-
-    if (!db) {
-      setRecentAlerts((prev) => [newAlert, ...prev].slice(0, 5));
-      showSuccess("Alert created successfully in demo mode.");
-      setAlertTitle("");
-      setAlertMessage("");
-      setAlertSeverity("medium");
-      setAlertDate("");
-      return;
-    }
-
+    if (!form.email || !form.password) { showError("Email and password are required."); return; }
+    setSubmitting(true);
     try {
-      await addDoc(collection(db, "alerts"), {
-        title: alertTitle.trim(),
-        message: alertMessage.trim(),
-        severity: alertSeverity,
-        date: alertDate,
-        status: "active",
-        createdAt: serverTimestamp()
+      await usersApi.create(form);
+      showSuccess(`User ${form.email} created.`);
+      setForm(EMPTY_USER); setShowCreate(false); load();
+    } catch (err) { showError(err.message || "Failed to create user."); }
+    finally { setSubmitting(false); }
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await usersApi.update(editingUser.id, {
+        displayName: editingUser.displayName,
+        rank: editingUser.rank,
+        unit: editingUser.unit,
+        role: editingUser.role,
+        phone: editingUser.phone
       });
-
-      showSuccess("Alert created successfully.");
-      setAlertTitle("");
-      setAlertMessage("");
-      setAlertSeverity("medium");
-      setAlertDate("");
-      fetchRecentAlerts();
-    } catch (error) {
-      console.error("Error adding alert:", error);
-      showError("Failed to create alert. Please try again.");
-    }
+      showSuccess("User updated.");
+      setEditingUser(null); load();
+    } catch (err) { showError(err.message || "Failed to update user."); }
+    finally { setSubmitting(false); }
   };
 
-  const deleteAlert = async (alertId) => {
-    if (!db) {
-      setRecentAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
-      showSuccess("Alert deleted in demo mode.");
-      return;
-    }
-
-    try {
-      await deleteDoc(doc(db, "alerts", alertId));
-      showSuccess("Alert deleted successfully!");
-      fetchRecentAlerts();
-    } catch (error) {
-      showError("Failed to delete alert.");
-    }
+  const handleDelete = async (id) => {
+    try { await usersApi.delete(id); showSuccess("User deleted."); load(); }
+    catch (err) { showError(err.message || "Failed to delete user."); }
+    finally { setDeleteConfirm(null); }
   };
+
+  const startEdit = (u) => setEditingUser({
+    id: u.id,
+    displayName: u.display_name || "",
+    rank: u.rank || "",
+    unit: u.unit || "",
+    role: u.role || "user",
+    phone: u.phone || ""
+  });
 
   return (
     <div className="admin-tab-content">
-      <div className="admin-section-header">
-        <h2><ShieldAlert size={20} strokeWidth={2} /> Manage Alerts</h2>
-        <p>Create and manage emergency alerts for the community</p>
+      <div className="tab-header">
+        <div>
+          <h2><Users size={20} /> User Management</h2>
+          <p className="tab-sub">Create, edit roles, and manage personnel accounts</p>
+        </div>
+        <div className="tab-actions">
+          <button className="icon-action-btn" onClick={load} title="Refresh"><RefreshCw size={15} /></button>
+          <Button variant="primary" onClick={() => { setShowCreate(v => !v); setEditingUser(null); }}>
+            <UserPlus size={15} /> {showCreate ? "Cancel" : "Add User"}
+          </Button>
+        </div>
       </div>
 
-      <div className="admin-form-section">
-        <Card variant="default" padding="lg">
-          <CardHeader>
-            <h3>Create New Alert</h3>
-          </CardHeader>
+      {showCreate && (
+        <Card variant="default" padding="lg" className="form-card">
+          <CardHeader><h3><UserPlus size={16} /> Create New User</h3></CardHeader>
           <CardBody>
-            <form onSubmit={addAlert} className="admin-form">
-              <div className="form-group">
-                <Input
-                  label="Alert Title *"
-                  type="text"
-                  value={alertTitle}
-                  onChange={(e) => setAlertTitle(e.target.value)}
-                  placeholder="e.g., Security Maintenance"
-                  error={alertErrors.title}
-                />
+            <form onSubmit={handleCreate} className="admin-form">
+              <div className="form-row">
+                <div className="form-group"><Input label="Email *" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="user@example.com" /></div>
+                <div className="form-group"><Input label="Password *" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 6 characters" /></div>
               </div>
-
-              <div className="form-group">
-                <Textarea
-                  label="Alert Message *"
-                  value={alertMessage}
-                  onChange={(e) => setAlertMessage(e.target.value)}
-                  placeholder="Describe the alert in detail..."
-                  error={alertErrors.message}
-                  rows={5}
-                />
+              <div className="form-row">
+                <div className="form-group"><Input label="Display Name" value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="e.g. Flight Lieutenant Mensah" /></div>
+                <div className="form-group"><Input label="Rank" value={form.rank} onChange={e => setForm(f => ({ ...f, rank: e.target.value }))} placeholder="e.g. Corporal" /></div>
               </div>
-
+              <div className="form-row">
+                <div className="form-group"><Input label="Unit" value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} placeholder="e.g. Engineering Squadron" /></div>
+                <div className="form-group"><Input label="Phone" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+233 24 000 0000" /></div>
+              </div>
               <div className="form-row">
                 <div className="form-group">
-                  <Select
-                    label="Severity Level *"
-                    value={alertSeverity}
-                    onChange={(e) => setAlertSeverity(e.target.value)}
-                  >
-                    <option value="low">Low Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
+                  <Select label="Role" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
                   </Select>
                 </div>
-
-                <div className="form-group">
-                  <Input
-                    label="Date *"
-                    type="date"
-                    value={alertDate}
-                    onChange={(e) => setAlertDate(e.target.value)}
-                    error={alertErrors.date}
-                  />
-                </div>
               </div>
-
-              <Button variant="primary" type="submit" fullWidth>
-                Publish Alert
-              </Button>
+              <div className="form-actions">
+                <Button variant="primary" type="submit" disabled={submitting}>{submitting ? "Creating..." : "Create User"}</Button>
+                <Button variant="ghost" type="button" onClick={() => setShowCreate(false)}><X size={15} /> Cancel</Button>
+              </div>
             </form>
           </CardBody>
         </Card>
-      </div>
-
-      {recentAlerts.length > 0 && (
-        <div className="admin-list-section">
-          <h3>Recent Alerts</h3>
-          <div className="admin-items-list">
-            {recentAlerts.map(alert => (
-              <Card key={alert.id} variant="default" padding="md">
-                <div className="admin-item-header">
-                  <div>
-                    <h4>{alert.title}</h4>
-                    <Badge variant={alert.severity}>{alert.severity}</Badge>
-                    <p className="admin-item-description">
-                      {alert.message}
-                    </p>
-                    <p className="admin-item-meta">
-                      Created: {formatDate(alert.createdAt)}
-                    </p>
-                  </div>
-                  <Button
-                    variant="error"
-                    size="sm"
-                    onClick={() => deleteAlert(alert.id)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
       )}
-    </div>
-  );
-}
 
-// Events Tab
-function EventsTab({ showSuccess, showError }) {
-  const [eventTitle, setEventTitle] = useState("");
-  const [eventLocation, setEventLocation] = useState("");
-  const [eventDate, setEventDate] = useState("");
-  const [eventTime, setEventTime] = useState("");
-  const [recentEvents, setRecentEvents] = useState(mockAdminData.recentEvents);
-
-  useEffect(() => {
-    fetchRecentEvents();
-  }, []);
-
-  const fetchRecentEvents = async () => {
-    if (!db) {
-      setRecentEvents(mockAdminData.recentEvents);
-      return;
-    }
-
-    try {
-      const q = query(
-        collection(db, "events"),
-        orderBy("createdAt", "desc"),
-        limit(5)
-      );
-      const snap = await getDocs(q);
-      setRecentEvents(snap.docs.map((eventDoc) => ({ id: eventDoc.id, ...eventDoc.data() })));
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      showError("Failed to fetch recent events.");
-    }
-  };
-
-  const handleAddEvent = async (e) => {
-    e.preventDefault();
-    if (!eventTitle || !eventLocation || !eventDate || !eventTime) {
-      showError("All fields are required");
-      return;
-    }
-
-    const newEvent = {
-      id: `demo-event-${Date.now()}`,
-      title: eventTitle.trim(),
-      location: eventLocation.trim(),
-      date: new Date(`${eventDate}T${eventTime}`),
-      time: eventTime,
-      category: "operations",
-      organizer: "Administration",
-      createdAt: new Date()
-    };
-
-    if (!db) {
-      setRecentEvents((prev) => [newEvent, ...prev].slice(0, 5));
-      showSuccess("Event created successfully in demo mode.");
-      setEventTitle("");
-      setEventLocation("");
-      setEventDate("");
-      setEventTime("");
-      return;
-    }
-
-    try {
-      await addDoc(collection(db, "events"), {
-        title: eventTitle,
-        location: eventLocation,
-        date: eventDate,
-        time: eventTime,
-        createdAt: serverTimestamp()
-      });
-      showSuccess("Event created successfully!");
-      setEventTitle("");
-      setEventLocation("");
-      setEventDate("");
-      setEventTime("");
-      fetchRecentEvents();
-    } catch (error) {
-      showError("Failed to create event");
-    }
-  };
-
-  return (
-    <div className="admin-tab-content">
-      <div className="admin-section-header">
-        <h2><CalendarDays size={20} strokeWidth={2} /> Manage Events</h2>
-        <p>Create and schedule community events</p>
-      </div>
-
-      <Card variant="default" padding="lg">
-        <CardHeader>
-          <h3>Create New Event</h3>
-        </CardHeader>
-        <CardBody>
-          <form onSubmit={handleAddEvent} className="admin-form">
-            <div className="form-group">
-              <Input
-                label="Event Title *"
-                type="text"
-                value={eventTitle}
-                onChange={(e) => setEventTitle(e.target.value)}
-                placeholder="e.g., Community Meeting"
-              />
+      {editingUser && (
+        <div className="modal-backdrop" onClick={() => setEditingUser(null)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><Pencil size={16} /> Edit User</h3>
+              <button className="modal-close" onClick={() => setEditingUser(null)}><X size={16} /></button>
             </div>
-
-            <div className="form-group">
-              <Input
-                label="Location *"
-                type="text"
-                value={eventLocation}
-                onChange={(e) => setEventLocation(e.target.value)}
-                placeholder="e.g., Main Hall"
-              />
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <Input
-                  label="Date *"
-                  type="date"
-                  value={eventDate}
-                  onChange={(e) => setEventDate(e.target.value)}
-                />
+            <form onSubmit={handleUpdate} className="admin-form">
+              <div className="form-row">
+                <div className="form-group"><Input label="Display Name" value={editingUser.displayName} onChange={e => setEditingUser(u => ({ ...u, displayName: e.target.value }))} /></div>
+                <div className="form-group"><Input label="Rank" value={editingUser.rank} onChange={e => setEditingUser(u => ({ ...u, rank: e.target.value }))} /></div>
               </div>
-              <div className="form-group">
-                <Input
-                  label="Time *"
-                  type="time"
-                  value={eventTime}
-                  onChange={(e) => setEventTime(e.target.value)}
-                />
+              <div className="form-row">
+                <div className="form-group"><Input label="Unit" value={editingUser.unit} onChange={e => setEditingUser(u => ({ ...u, unit: e.target.value }))} /></div>
+                <div className="form-group"><Input label="Phone" type="tel" value={editingUser.phone} onChange={e => setEditingUser(u => ({ ...u, phone: e.target.value }))} placeholder="+233 24 000 0000" /></div>
               </div>
-            </div>
-
-            <Button variant="primary" type="submit" fullWidth>
-              Create Event
-            </Button>
-          </form>
-        </CardBody>
-      </Card>
-
-      {recentEvents.length > 0 && (
-        <div className="admin-list-section">
-          <h3>Recent Events</h3>
-          <div className="admin-items-list">
-            {recentEvents.map((eventItem) => (
-              <Card key={eventItem.id} variant="default" padding="md">
-                <div className="admin-item-header">
-                  <div>
-                    <h4>{eventItem.title}</h4>
-                    <Badge variant="info">{eventItem.category || "general"}</Badge>
-                    <p className="admin-item-description">
-                      {eventItem.location}
-                    </p>
-                    <p className="admin-item-meta">
-                      Scheduled: {formatDate(eventItem.date)}
-                    </p>
-                  </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <Select label="Role" value={editingUser.role} onChange={e => setEditingUser(u => ({ ...u, role: e.target.value }))}>
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </Select>
                 </div>
-              </Card>
-            ))}
+              </div>
+              <div className="form-actions">
+                <Button variant="primary" type="submit" disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</Button>
+                <Button variant="ghost" type="button" onClick={() => setEditingUser(null)}>Cancel</Button>
+              </div>
+            </form>
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
-// Announcements Tab
-function AnnouncementsTab({ showSuccess, showError }) {
-  const [announcementTitle, setAnnouncementTitle] = useState("");
-  const [announcementContent, setAnnouncementContent] = useState("");
-  const [recentAnnouncements, setRecentAnnouncements] = useState(mockAdminData.recentAnnouncements);
-
-  useEffect(() => {
-    fetchRecentAnnouncements();
-  }, []);
-
-  const fetchRecentAnnouncements = async () => {
-    if (!db) {
-      setRecentAnnouncements(mockAdminData.recentAnnouncements);
-      return;
-    }
-
-    try {
-      const q = query(
-        collection(db, "announcements"),
-        orderBy("createdAt", "desc"),
-        limit(5)
-      );
-      const snap = await getDocs(q);
-      setRecentAnnouncements(snap.docs.map((announcementDoc) => ({ id: announcementDoc.id, ...announcementDoc.data() })));
-    } catch (error) {
-      console.error("Error fetching announcements:", error);
-      showError("Failed to fetch recent announcements.");
-    }
-  };
-
-  const handleAddAnnouncement = async (e) => {
-    e.preventDefault();
-    if (!announcementTitle || !announcementContent) {
-      showError("All fields are required");
-      return;
-    }
-
-    const newAnnouncement = {
-      id: `demo-announcement-${Date.now()}`,
-      title: announcementTitle.trim(),
-      content: announcementContent.trim(),
-      priority: "medium",
-      category: "general",
-      createdAt: new Date(),
-      author: "Admin Office"
-    };
-
-    if (!db) {
-      setRecentAnnouncements((prev) => [newAnnouncement, ...prev].slice(0, 5));
-      showSuccess("Announcement posted successfully in demo mode.");
-      setAnnouncementTitle("");
-      setAnnouncementContent("");
-      return;
-    }
-
-    try {
-      await addDoc(collection(db, "announcements"), {
-        title: announcementTitle,
-        content: announcementContent,
-        createdAt: serverTimestamp()
-      });
-      showSuccess("Announcement posted successfully!");
-      setAnnouncementTitle("");
-      setAnnouncementContent("");
-      fetchRecentAnnouncements();
-    } catch (error) {
-      showError("Failed to post announcement");
-    }
-  };
-
-  return (
-    <div className="admin-tab-content">
-      <div className="admin-section-header">
-        <h2><Megaphone size={20} strokeWidth={2} /> Manage Announcements</h2>
-        <p>Post important announcements to the community</p>
+      <div className="users-search-row">
+        <input className="users-search" placeholder="Search by name, email or unit..." value={search} onChange={e => setSearch(e.target.value)} />
+        <span className="users-count">{filtered.length} of {users.length} users</span>
       </div>
 
-      <Card variant="default" padding="lg">
-        <CardHeader>
-          <h3>Create New Announcement</h3>
-        </CardHeader>
-        <CardBody>
-          <form onSubmit={handleAddAnnouncement} className="admin-form">
-            <div className="form-group">
-              <Input
-                label="Title *"
-                type="text"
-                value={announcementTitle}
-                onChange={(e) => setAnnouncementTitle(e.target.value)}
-                placeholder="Announcement title"
-              />
-            </div>
-
-            <div className="form-group">
-              <Textarea
-                label="Content *"
-                value={announcementContent}
-                onChange={(e) => setAnnouncementContent(e.target.value)}
-                placeholder="Write your announcement here..."
-                rows={6}
-              />
-            </div>
-
-            <Button variant="primary" type="submit" fullWidth>
-              Post Announcement
-            </Button>
-          </form>
-        </CardBody>
-      </Card>
-
-      {recentAnnouncements.length > 0 && (
-        <div className="admin-list-section">
-          <h3>Recent Announcements</h3>
-          <div className="admin-items-list">
-            {recentAnnouncements.map((announcementItem) => (
-              <Card key={announcementItem.id} variant="default" padding="md">
-                <div className="admin-item-header">
-                  <div>
-                    <h4>{announcementItem.title}</h4>
-                    <Badge variant={announcementItem.priority || "info"}>{announcementItem.priority || "info"}</Badge>
-                    <p className="admin-item-description">
-                      {announcementItem.content}
-                    </p>
-                    <p className="admin-item-meta">
-                      Published: {formatDate(announcementItem.createdAt)}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Settings Tab
-function SettingsTab() {
-  const previewUsers = mockAdminData.managedUsers.slice(0, 15);
-
-  return (
-    <div className="admin-tab-content">
-      <h2><Settings2 size={22} strokeWidth={2} /> Administration Settings</h2>
-      <Card variant="default" padding="lg">
-        <CardHeader>
-          <h3>Portal Settings</h3>
-        </CardHeader>
-        <CardBody>
-          <div className="settings-info">
-            <p>Configured settings currently active in the portal:</p>
-            <div className="admin-items-list" style={{ marginTop: "12px" }}>
-              {mockAdminData.settings.map((setting) => (
-                <div key={setting.id} className="info-row">
-                  <span className="info-label">{setting.name}</span>
-                  <span className="info-value">
-                    {setting.value} <Badge variant={setting.status === "review" ? "warning" : "success"}>{setting.status}</Badge>
-                  </span>
-                </div>
+      {loading ? (
+        <div className="admin-loading"><div className="admin-spinner" /></div>
+      ) : (
+        <div className="users-table-wrap">
+          <table className="users-table">
+            <thead>
+              <tr><th>User</th><th>Rank / Unit</th><th>Role</th><th>Joined</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {filtered.map(u => (
+                <tr key={u.id} className={u.id === currentUserId ? "current-user-row" : ""}>
+                  <td>
+                    <div className="user-cell">
+                      <div className="user-avatar-sm">{u.role === 'admin' ? <Crown size={14} /> : <User size={14} />}</div>
+                      <div>
+                        <div className="user-name">{u.display_name || "—"}</div>
+                        <div className="user-email-sm"><Mail size={11} /> {u.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="user-rank">{u.rank || "—"}</div>
+                    <div className="user-unit-sm">{u.unit || "—"}</div>
+                    {u.phone && <div className="user-unit-sm">📞 {u.phone}</div>}
+                  </td>
+                  <td><Badge variant={u.role === 'admin' ? 'primary' : 'default'} size="sm">{u.role}</Badge></td>
+                  <td className="user-date">{u.created_at ? new Date(u.created_at).toLocaleDateString('en-GB') : "—"}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button className="row-btn edit-btn" onClick={() => startEdit(u)} title="Edit"><Pencil size={13} /></button>
+                      {u.id !== currentUserId && (
+                        deleteConfirm === u.id ? (
+                          <div className="inline-confirm">
+                            <span>Delete?</span>
+                            <button className="confirm-yes" onClick={() => handleDelete(u.id)}>Yes</button>
+                            <button className="confirm-no" onClick={() => setDeleteConfirm(null)}>No</button>
+                          </div>
+                        ) : (
+                          <button className="row-btn delete-btn" onClick={() => setDeleteConfirm(u.id)} title="Delete"><Trash2 size={13} /></button>
+                        )
+                      )}
+                    </div>
+                  </td>
+                </tr>
               ))}
+              {filtered.length === 0 && <tr><td colSpan={5} className="empty-row">No users found.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Reusable CRUD Section ──────────────────────────────────────────────────
+function CrudSection({ title, icon, items, form, setForm, emptyForm, editing, setEditing, submitting, deleteConfirm, setDeleteConfirm, onSubmit, onDelete, renderForm, renderItem, onRefresh }) {
+  return (
+    <div className="admin-tab-content">
+      <div className="tab-header">
+        <h2>{icon} {title}</h2>
+        {onRefresh && <button className="icon-action-btn" onClick={onRefresh} title="Refresh"><RefreshCw size={15} /></button>}
+      </div>
+      <Card variant="default" padding="lg" className="form-card">
+        <CardHeader>
+          <h3>{editing ? <><Pencil size={15} /> Edit</> : <><Plus size={15} /> Create New</>}</h3>
+        </CardHeader>
+        <CardBody>
+          <form onSubmit={onSubmit} className="admin-form">
+            {renderForm()}
+            <div className="form-actions">
+              <Button variant="primary" type="submit" disabled={submitting}>
+                {submitting ? "Saving..." : editing ? "Update" : "Create"}
+              </Button>
+              {editing && (
+                <Button variant="ghost" type="button" onClick={() => { setEditing(null); setForm(emptyForm); }}>
+                  <X size={15} /> Cancel
+                </Button>
+              )}
             </div>
-            <p style={{ marginTop: "16px" }}>Current features:</p>
-            <ul className="settings-features">
-              <li>Alert Management</li>
-              <li>Event Scheduling</li>
-              <li>Announcements Publishing</li>
-              <li>User Role Management</li>
-              <li>Analytics Dashboard</li>
-            </ul>
-          </div>
+          </form>
         </CardBody>
       </Card>
+      <div className="items-section">
+        <h3 className="items-heading">{items.length} {title.replace('Manage ', '')}s</h3>
+        <div className="items-list">
+          {items.map(item => (
+            <div key={item.id} className="item-row">
+              <div className="item-row-content">{renderItem(item)}</div>
+              <div className="item-row-actions">
+                <button className="row-btn edit-btn" onClick={() => { setEditing(item.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} title="Edit"><Pencil size={13} /></button>
+                {deleteConfirm === item.id ? (
+                  <div className="inline-confirm">
+                    <span>Delete?</span>
+                    <button className="confirm-yes" onClick={() => onDelete(item.id)}>Yes</button>
+                    <button className="confirm-no" onClick={() => setDeleteConfirm(null)}>No</button>
+                  </div>
+                ) : (
+                  <button className="row-btn delete-btn" onClick={() => setDeleteConfirm(item.id)} title="Delete"><Trash2 size={13} /></button>
+                )}
+              </div>
+            </div>
+          ))}
+          {items.length === 0 && <p className="empty-list">Nothing here yet.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      <Card variant="default" padding="lg" style={{ marginTop: "24px" }}>
-        <CardHeader>
-          <h3>User Access Snapshot</h3>
-        </CardHeader>
-        <CardBody>
-          <div className="info-row">
-            <span className="info-label">Total Personnel Records</span>
-            <span className="info-value">
-              <Badge variant="primary">{mockAdminData.stats.totalPersonnel}</Badge>
-            </span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">Actively Available Personnel</span>
-            <span className="info-value">
-              <Badge variant="success">{mockAdminData.stats.activeUsers}</Badge>
-            </span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">Displayed Roster Preview</span>
-            <span className="info-value">
-              <Badge variant="info">{previewUsers.length} of {mockAdminData.managedUsers.length}</Badge>
-            </span>
-          </div>
+// ── Alerts Tab ─────────────────────────────────────────────────────────────
+const EMPTY_ALERT = { title: "", message: "", severity: "medium", status: "active", expires_at: "" };
 
-          <div className="admin-items-list">
-            {previewUsers.map((user) => (
-              <div key={user.id} className="info-row">
-                <span className="info-label">{user.name} ({user.unit})</span>
-                <span className="info-value">
-                  <Badge variant="primary">{user.role}</Badge>
-                  <Badge variant={user.status === "active" || user.status === "on-duty" ? "success" : "warning"}>{user.status}</Badge>
-                </span>
+function AlertsTab({ showSuccess, showError }) {
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState(EMPTY_ALERT);
+  const [editing, setEditing] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const load = useCallback(async () => {
+    try { setItems(await alertsApi.getAll()); }
+    catch (err) { showError(err.message || "Failed to load alerts."); }
+  }, [showError]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (editing) {
+      const item = items.find(i => i.id === editing);
+      if (item) setForm({ title: item.title, message: item.message, severity: item.severity, status: item.status, expires_at: fmtDate(item.expires_at) });
+    } else {
+      setForm(EMPTY_ALERT);
+    }
+  }, [editing, items]);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.message.trim()) { showError("Title and message required."); return; }
+    setSubmitting(true);
+    try {
+      editing ? await alertsApi.update(editing, form) : await alertsApi.create(form);
+      showSuccess(editing ? "Alert updated." : "Alert created.");
+      setEditing(null); load();
+    } catch (err) { showError(err.message || "Failed to save alert."); }
+    finally { setSubmitting(false); }
+  };
+
+  const onDelete = async (id) => {
+    try { await alertsApi.delete(id); showSuccess("Alert deleted."); load(); }
+    catch (err) { showError(err.message || "Failed to delete alert."); }
+    finally { setDeleteConfirm(null); }
+  };
+
+  return (
+    <CrudSection
+      title="Manage Alerts" icon={<ShieldAlert size={20} />}
+      items={items} form={form} setForm={setForm} emptyForm={EMPTY_ALERT}
+      editing={editing} setEditing={setEditing} submitting={submitting}
+      deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm}
+      onSubmit={onSubmit} onDelete={onDelete} onRefresh={load}
+      renderForm={() => (
+        <>
+          <div className="form-group"><Input label="Title *" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Alert title" /></div>
+          <div className="form-group"><Textarea label="Message *" value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} rows={3} placeholder="Alert details..." /></div>
+          <div className="form-row">
+            <div className="form-group">
+              <Select label="Severity" value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value }))}>
+                {['low','medium','high','warning','info'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+              </Select>
+            </div>
+            <div className="form-group">
+              <Select label="Status" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+                <option value="active">Active</option>
+                <option value="resolved">Resolved</option>
+              </Select>
+            </div>
+            <div className="form-group"><Input label="Expires On" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} /></div>
+          </div>
+        </>
+      )}
+      renderItem={item => (
+        <>
+          <div className="item-title">{item.title}</div>
+          <div className="item-badges">
+            <Badge variant={item.severity === 'high' ? 'error' : item.severity === 'warning' ? 'warning' : 'info'} size="sm">{item.severity}</Badge>
+            <Badge variant={item.status === 'active' ? 'success' : 'gray'} size="sm">{item.status}</Badge>
+          </div>
+          <div className="item-meta">{item.message?.slice(0, 100)}{item.message?.length > 100 ? '…' : ''}</div>
+          <div className="item-date">{fmt(item.created_at)}</div>
+        </>
+      )}
+    />
+  );
+}
+
+// ── Events Tab ─────────────────────────────────────────────────────────────
+const EMPTY_EVENT = { title: "", description: "", location: "", date: "", time: "", category: "general", organizer: "Administration" };
+
+function EventsTab({ showSuccess, showError }) {
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState(EMPTY_EVENT);
+  const [editing, setEditing] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const load = useCallback(async () => {
+    try { setItems(await eventsApi.getAll()); }
+    catch (err) { showError(err.message || "Failed to load events."); }
+  }, [showError]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (editing) {
+      const item = items.find(i => i.id === editing);
+      if (item) setForm({ title: item.title, description: item.description || "", location: item.location, date: fmtDate(item.date), time: item.time || "", category: item.category || "general", organizer: item.organizer || "Administration" });
+    } else {
+      setForm(EMPTY_EVENT);
+    }
+  }, [editing, items]);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.location.trim() || !form.date) { showError("Title, location, and date required."); return; }
+    setSubmitting(true);
+    const payload = { ...form, date: new Date(`${form.date}T${form.time || "08:00"}`).toISOString() };
+    try {
+      editing ? await eventsApi.update(editing, payload) : await eventsApi.create(payload);
+      showSuccess(editing ? "Event updated." : "Event created.");
+      setEditing(null); load();
+    } catch (err) { showError(err.message || "Failed to save event."); }
+    finally { setSubmitting(false); }
+  };
+
+  const onDelete = async (id) => {
+    try { await eventsApi.delete(id); showSuccess("Event deleted."); load(); }
+    catch (err) { showError(err.message || "Failed to delete event."); }
+    finally { setDeleteConfirm(null); }
+  };
+
+  return (
+    <CrudSection
+      title="Manage Events" icon={<CalendarDays size={20} />}
+      items={items} form={form} setForm={setForm} emptyForm={EMPTY_EVENT}
+      editing={editing} setEditing={setEditing} submitting={submitting}
+      deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm}
+      onSubmit={onSubmit} onDelete={onDelete} onRefresh={load}
+      renderForm={() => (
+        <>
+          <div className="form-group"><Input label="Title *" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Event title" /></div>
+          <div className="form-group"><Textarea label="Description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="Optional details..." /></div>
+          <div className="form-group"><Input label="Location *" value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Main Parade Ground" /></div>
+          <div className="form-row">
+            <div className="form-group"><Input label="Date *" type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} /></div>
+            <div className="form-group"><Input label="Time" type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} /></div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <Select label="Category" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                {['general','ceremony','sports','training','social','operations','education','community'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+              </Select>
+            </div>
+            <div className="form-group"><Input label="Organizer" value={form.organizer} onChange={e => setForm(f => ({ ...f, organizer: e.target.value }))} placeholder="e.g. Command HQ" /></div>
+          </div>
+        </>
+      )}
+      renderItem={item => (
+        <>
+          <div className="item-title">{item.title}</div>
+          <div className="item-badges"><Badge variant="primary" size="sm">{item.category || 'general'}</Badge></div>
+          <div className="item-meta">{item.location} · {item.organizer}</div>
+          <div className="item-date">{fmt(item.date)}</div>
+        </>
+      )}
+    />
+  );
+}
+
+// ── Announcements Tab ──────────────────────────────────────────────────────
+const EMPTY_ANN = { title: "", content: "", priority: "medium", category: "general", author: "Admin Office" };
+
+function AnnouncementsTab({ showSuccess, showError }) {
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState(EMPTY_ANN);
+  const [editing, setEditing] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const load = useCallback(async () => {
+    try { setItems(await announcementsApi.getAll()); }
+    catch (err) { showError(err.message || "Failed to load announcements."); }
+  }, [showError]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (editing) {
+      const item = items.find(i => i.id === editing);
+      if (item) setForm({ title: item.title, content: item.content, priority: item.priority, category: item.category || "general", author: item.author || "Admin Office" });
+    } else {
+      setForm(EMPTY_ANN);
+    }
+  }, [editing, items]);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.content.trim()) { showError("Title and content required."); return; }
+    setSubmitting(true);
+    try {
+      editing ? await announcementsApi.update(editing, form) : await announcementsApi.create(form);
+      showSuccess(editing ? "Announcement updated." : "Announcement posted.");
+      setEditing(null); load();
+    } catch (err) { showError(err.message || "Failed to save announcement."); }
+    finally { setSubmitting(false); }
+  };
+
+  const onDelete = async (id) => {
+    try { await announcementsApi.delete(id); showSuccess("Announcement deleted."); load(); }
+    catch (err) { showError(err.message || "Failed to delete announcement."); }
+    finally { setDeleteConfirm(null); }
+  };
+
+  return (
+    <CrudSection
+      title="Manage Announcements" icon={<Megaphone size={20} />}
+      items={items} form={form} setForm={setForm} emptyForm={EMPTY_ANN}
+      editing={editing} setEditing={setEditing} submitting={submitting}
+      deleteConfirm={deleteConfirm} setDeleteConfirm={setDeleteConfirm}
+      onSubmit={onSubmit} onDelete={onDelete} onRefresh={load}
+      renderForm={() => (
+        <>
+          <div className="form-group"><Input label="Title *" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Announcement title" /></div>
+          <div className="form-group"><Textarea label="Content *" value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} rows={4} placeholder="Write your announcement..." /></div>
+          <div className="form-row">
+            <div className="form-group">
+              <Select label="Priority" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
+                {['low','medium','high'].map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase()+p.slice(1)}</option>)}
+              </Select>
+            </div>
+            <div className="form-group">
+              <Select label="Category" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                {['general','personnel','welfare','education','security','infrastructure','health'].map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+              </Select>
+            </div>
+            <div className="form-group"><Input label="Author" value={form.author} onChange={e => setForm(f => ({ ...f, author: e.target.value }))} placeholder="e.g. Air Force HQ" /></div>
+          </div>
+        </>
+      )}
+      renderItem={item => (
+        <>
+          <div className="item-title">{item.title}</div>
+          <div className="item-badges">
+            <Badge variant={item.priority === 'high' ? 'error' : item.priority === 'medium' ? 'warning' : 'info'} size="sm">{item.priority}</Badge>
+            <Badge variant="default" size="sm">{item.category}</Badge>
+          </div>
+          <div className="item-meta">{item.content?.slice(0, 100)}{item.content?.length > 100 ? '…' : ''}</div>
+          <div className="item-date">By {item.author} · {fmt(item.created_at)}</div>
+        </>
+      )}
+    />
+  );
+}
+
+// ── Settings Tab ───────────────────────────────────────────────────────────
+function SettingsTab() {
+  return (
+    <div className="admin-tab-content">
+      <div className="tab-header">
+        <div>
+          <h2><Settings2 size={20} /> Settings</h2>
+          <p className="tab-sub">Portal configuration and system information</p>
+        </div>
+      </div>
+      <div className="settings-grid">
+        <div className="info-card">
+          <h3><Activity size={16} /> Portal Features</h3>
+          <div className="info-grid">
+            {["Alert Management","Event Scheduling","Announcements","User Management","Analytics Dashboard"].map(f => (
+              <div key={f} className="info-row">
+                <span className="info-label">{f}</span>
+                <span className="info-value"><Badge variant="success">Active</Badge></span>
               </div>
             ))}
           </div>
-        </CardBody>
-      </Card>
-
-      <Card variant="default" padding="lg" style={{ marginTop: "24px" }}>
-        <CardHeader>
-          <h3>Unit Strength Summary</h3>
-        </CardHeader>
-        <CardBody>
-          <div className="admin-items-list">
-            {mockAdminData.unitSummary.map((unitItem) => (
-              <div key={unitItem.unit} className="info-row">
-                <span className="info-label">{unitItem.unit}</span>
-                <span className="info-value">
-                  <Badge variant="primary">Total {unitItem.personnel}</Badge>
-                  <Badge variant="success">Active {unitItem.active}</Badge>
-                  <Badge variant="warning">Training {unitItem.training}</Badge>
-                </span>
+        </div>
+        <div className="info-card">
+          <h3><ShieldCheck size={16} /> System Info</h3>
+          <div className="info-grid">
+            {[
+              ["Database", <Badge variant="success">Connected</Badge>],
+              ["Portal",   <Badge variant="success">Operational</Badge>],
+              ["Role",     <Badge variant="primary">Administrator</Badge>],
+              ["Version",  "1.0.0"],
+            ].map(([k, v]) => (
+              <div key={k} className="info-row">
+                <span className="info-label">{k}</span>
+                <span className="info-value">{v}</span>
               </div>
             ))}
           </div>
-        </CardBody>
-      </Card>
-
-      <Card variant="default" padding="lg" style={{ marginTop: "24px" }}>
-        <CardHeader>
-          <h3>Latest Audit Log Entries</h3>
-        </CardHeader>
-        <CardBody>
-          <div className="admin-items-list">
-            {mockAdminData.auditLogs.map((entry) => (
-              <div key={entry.id} className="info-row">
-                <span className="info-label">{entry.target}</span>
-                <span className="info-value">
-                  {entry.action} by {entry.actor} | {formatDate(entry.createdAt)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </CardBody>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

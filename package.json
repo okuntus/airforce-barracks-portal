@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "cd community-app && npm run dev",
+    "dev": "npm run dev --prefix community-app",
+    "build": "npm run build --prefix community-app",
+    "preview": "npm run preview --prefix community-app",
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -22,5 +25,8 @@
     "@vitejs/plugin-react": "^4.7.0",
     "@vitejs/plugin-react-swc": "^4.2.3",
     "vite": "^5.4.21"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
   }
 }

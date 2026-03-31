@@ -10,7 +10,6 @@
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,scss,html}\""
   },
   "dependencies": {
-    "firebase": "^12.10.0",
     "framer-motion": "^12.35.0",
     "lucide-react": "^0.577.0",
     "react": "^18.2.0",

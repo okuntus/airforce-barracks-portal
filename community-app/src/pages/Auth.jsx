@@ -2,59 +2,42 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import {
-  AlertTriangle,
-  ArrowLeft,
-  Eye,
-  EyeOff,
-  FlaskConical,
-  Loader2,
-  Lock,
-  ShieldCheck,
-  UserCircle2
-} from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Eye, EyeOff, Loader2, Lock } from 'lucide-react';
 import GhanaAirForceLogo from '../assets/images.jpg';
 import './Auth.css';
 
 export default function Auth() {
-  const [authMode, setAuthMode] = useState('welcome'); // welcome, login, signup
+  const [mode, setMode] = useState('welcome'); // welcome | login | signup
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { demoLogin } = useAuth();
+  const { login, register } = useAuth();
   const navigate = useNavigate();
 
-  const DEMO_ACCOUNTS = {
-    'user@demo.com': { password: 'password', role: 'user' },
-    'admin@demo.com': { password: 'password', role: 'admin' }
+  const reset = (nextMode) => {
+    setError('');
+    setEmail('');
+    setPassword('');
+    setFullName('');
+    setConfirmPassword('');
+    setShowPassword(false);
+    setMode(nextMode);
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (!email || !password) { setError('Email and password are required'); return; }
     setError('');
     setLoading(true);
-
     try {
-      if (!email || !password) {
-        throw new Error('Email and password are required');
-      }
-
-      const account = DEMO_ACCOUNTS[email];
-      if (account && account.password === password) {
-        demoLogin({ email, role: account.role });
-        navigate('/');
-      } else {
-        throw new Error('Invalid email or password');
-      }
-    } catch (error) {
-      setError(error.message || 'Login failed');
-      console.error('Login error:', error);
+      await login(email, password);
+      navigate('/');
+    } catch (err) {
+      setError(err.message || 'Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -62,564 +45,219 @@ export default function Auth() {
 
   const handleSignup = async (e) => {
     e.preventDefault();
+    if (!fullName || !email || !password || !confirmPassword) { setError('All fields are required'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setError('');
-    
-    if (!fullName || !email || !username || !password || !confirmPassword) {
-      setError('All fields are required');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
-
     setLoading(true);
     try {
-      // Demo mode signup - just login as new user
-      demoLogin({ 
-        email, 
-        role: 'user',
-        name: fullName,
-        username: username
-      });
+      await register(email, password, fullName);
       navigate('/');
-    } catch (error) {
-      setError(error.message || 'Sign up failed');
-      console.error('Signup error:', error);
+    } catch (err) {
+      setError(err.message || 'Sign up failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickDemo = (demoEmail, role) => {
-    demoLogin({ 
-      email: demoEmail, 
-      role: role
-    });
-    navigate('/');
-  };
-
-  const slideVariants = {
-    enter: (direction) => ({
-      x: direction > 0 ? 1000 : -1000,
-      opacity: 0
-    }),
-    center: {
-      zIndex: 1,
-      x: 0,
-      opacity: 1
-    },
-    exit: (direction) => ({
-      zIndex: 0,
-      x: direction < 0 ? 1000 : -1000,
-      opacity: 0
-    })
-  };
-
   return (
     <div className="auth-container">
-      {/* Left Panel - Branding */}
-      <motion.div 
+      {/* Left Panel — Branding */}
+      <motion.div
         className="auth-branding"
-        initial={{ opacity: 0, x: -100 }}
+        initial={{ opacity: 0, x: -60 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6 }}
+        transition={{ duration: 0.5 }}
       >
         <div className="branding-content">
-          {/* Air Force Logo/Insignia */}
-          <motion.div 
+          <motion.div
             className="logo-container"
-            animate={{ 
-              y: [0, -10, 0],
-            }}
-            transition={{ 
-              duration: 4,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
+            animate={{ y: [0, -8, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
           >
-            <img 
-              src={GhanaAirForceLogo} 
-              alt="Ghana Air Force Logo" 
-              className="logo-image"
-            />
+            <img src={GhanaAirForceLogo} alt="Ghana Air Force Logo" className="logo-image" />
           </motion.div>
 
-          {/* Title and Subtitle */}
-          <motion.h1 
+          <motion.h1
             className="branding-title"
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.5 }}
+            transition={{ delay: 0.2 }}
           >
-            Air Force Barracks
+            Airforce Information Portal
           </motion.h1>
 
-          <motion.p 
+          <motion.p
             className="branding-subtitle"
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
+            transition={{ delay: 0.3 }}
           >
             Secure Access Portal
           </motion.p>
 
           <motion.p
             className="branding-descriptor"
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.36, duration: 0.5 }}
+            transition={{ delay: 0.36 }}
           >
             Military Community Management System
           </motion.p>
 
-          {/* Security Indicator */}
-          <motion.div 
+          <motion.div
             className="security-badge"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.4, duration: 0.5 }}
+            transition={{ delay: 0.4 }}
           >
-            <span className="security-icon"><Lock size={16} strokeWidth={2} /></span>
+            <Lock size={15} strokeWidth={2} />
             <span>256-bit Encrypted Session</span>
           </motion.div>
 
-          {/* Animated Background Elements */}
           <div className="animated-particles">
-            {[...Array(3)].map((_, i) => (
+            {[0, 1, 2].map(i => (
               <motion.div
                 key={i}
                 className="particle"
-                animate={{
-                  y: [0, -30, 0],
-                  opacity: [0.3, 0.6, 0.3]
-                }}
-                transition={{
-                  duration: 3 + i,
-                  repeat: Infinity,
-                  delay: i * 0.5
-                }}
+                animate={{ y: [0, -28, 0], opacity: [0.3, 0.6, 0.3] }}
+                transition={{ duration: 3 + i, repeat: Infinity, delay: i * 0.5 }}
               />
             ))}
           </div>
         </div>
       </motion.div>
 
-      {/* Right Panel - Authentication */}
+      {/* Right Panel — Auth Forms */}
       <div className="auth-panel">
-        {authMode === 'welcome' && (
+
+        {/* Welcome */}
+        {mode === 'welcome' && (
           <motion.div
-            key="welcome"
             className="auth-card welcome-card"
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3 }}
           >
-            <motion.div
-              className="welcome-content"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ staggerChildren: 0.1, delayChildren: 0.2 }}
-            >
-              <motion.h2 
-                className="welcome-title"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                Welcome
-              </motion.h2>
-
-              <motion.p 
-                className="welcome-subtitle"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                Sign in to your community account or create a new one
-              </motion.p>
-
-              <motion.div 
-                className="welcome-buttons"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <motion.button
-                  className="btn btn-primary"
-                  onClick={() => setAuthMode('login')}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  Log In
-                </motion.button>
-
-                <motion.button
-                  className="btn btn-secondary"
-                  onClick={() => setAuthMode('signup')}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  Sign Up
-                </motion.button>
-              </motion.div>
-
-              {/* Demo Mode Section */}
-              <motion.div 
-                className="demo-section"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <p className="demo-label"><FlaskConical size={14} strokeWidth={2} /> Demo Mode</p>
-                <p className="demo-description">Try the system with demo credentials</p>
-                
-                <div className="demo-buttons">
-                  <motion.button
-                    className="demo-btn user-demo"
-                    onClick={() => handleQuickDemo('user@demo.com', 'user')}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <span className="demo-icon"><UserCircle2 size={20} strokeWidth={2} /></span>
-                    <span>User Demo</span>
-                  </motion.button>
-
-                  <motion.button
-                    className="demo-btn admin-demo"
-                    onClick={() => handleQuickDemo('admin@demo.com', 'admin')}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <span className="demo-icon"><ShieldCheck size={20} strokeWidth={2} /></span>
-                    <span>Admin Demo</span>
-                  </motion.button>
-                </div>
-              </motion.div>
-            </motion.div>
+            <h2 className="welcome-title">Welcome</h2>
+            <p className="welcome-subtitle">Sign in to your account or create a new one to access the portal</p>
+            <div className="welcome-buttons">
+              <motion.button className="btn btn-primary" onClick={() => setMode('login')} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+                Log In
+              </motion.button>
+              <motion.button className="btn btn-secondary" onClick={() => setMode('signup')} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+                Create Account
+              </motion.button>
+            </div>
           </motion.div>
         )}
 
-        {authMode === 'login' && (
+        {/* Login */}
+        {mode === 'login' && (
           <motion.div
-            key="login"
             className="auth-card login-card"
-            initial={{ opacity: 0, x: 100 }}
+            initial={{ opacity: 0, x: 60 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <motion.div
-              className="card-header"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <button
-                className="back-button"
-                onClick={() => {
-                  setAuthMode('welcome');
-                  setError('');
-                }}
-              >
+            <div className="card-header">
+              <button className="back-button" onClick={() => reset('welcome')}>
                 <ArrowLeft size={15} strokeWidth={2} /> Back
               </button>
               <h2>Log In</h2>
-            </motion.div>
+            </div>
 
             <form onSubmit={handleLogin} className="auth-form">
               {error && (
-                <motion.div
-                  className="error-message"
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <span className="error-icon"><AlertTriangle size={14} strokeWidth={2} /></span>
-                  {error}
+                <motion.div className="error-message" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+                  <AlertTriangle size={14} strokeWidth={2} /> {error}
                 </motion.div>
               )}
 
-              <motion.div 
-                className="form-group"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.1 }}
-              >
-                <label htmlFor="login-email">Email or Username</label>
-                <input
-                  id="login-email"
-                  type="text"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="user@demo.com"
-                  required
-                />
-              </motion.div>
+              <div className="form-group">
+                <label htmlFor="login-email">Email Address</label>
+                <input id="login-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" required autoComplete="email" />
+              </div>
 
-              <motion.div 
-                className="form-group"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.15 }}
-              >
+              <div className="form-group">
                 <label htmlFor="login-password">Password</label>
                 <div className="password-input-wrapper">
-                  <input
-                    id="login-password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    onClick={() => setShowPassword(!showPassword)}
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
+                  <input id="login-password" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" required autoComplete="current-password" />
+                  <button type="button" className="password-toggle" onClick={() => setShowPassword(v => !v)} title={showPassword ? 'Hide' : 'Show'}>
                     {showPassword ? <EyeOff size={16} strokeWidth={2} /> : <Eye size={16} strokeWidth={2} />}
                   </button>
                 </div>
-              </motion.div>
+              </div>
 
-              <motion.div 
-                className="form-options"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
-                  Remember me
-                </label>
-                <a href="#forgot" className="forgot-password">
-                  Forgot password?
-                </a>
-              </motion.div>
-
-              <motion.button
-                type="submit"
-                className="btn btn-primary btn-block"
-                disabled={loading}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.25 }}
-              >
-                {loading ? (
-                  <span className="loading-spinner"><Loader2 size={16} strokeWidth={2} /> Logging in...</span>
-                ) : (
-                  'Log In'
-                )}
+              <motion.button type="submit" className="btn btn-primary btn-block" disabled={loading} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                {loading ? <><Loader2 size={16} strokeWidth={2} className="spin" /> Logging in...</> : 'Log In'}
               </motion.button>
 
-              <motion.p 
-                className="auth-switch"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-              >
+              <p className="auth-switch">
                 Don't have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode('signup');
-                    setError('');
-                  }}
-                  className="link-button"
-                >
-                  Sign Up
-                </button>
-              </motion.p>
+                <button type="button" className="link-button" onClick={() => reset('signup')}>Create one</button>
+              </p>
             </form>
           </motion.div>
         )}
 
-        {authMode === 'signup' && (
+        {/* Sign Up */}
+        {mode === 'signup' && (
           <motion.div
-            key="signup"
             className="auth-card signup-card"
-            initial={{ opacity: 0, x: -100 }}
+            initial={{ opacity: 0, x: -60 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <motion.div
-              className="card-header"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <button
-                className="back-button"
-                onClick={() => {
-                  setAuthMode('welcome');
-                  setError('');
-                }}
-              >
+            <div className="card-header">
+              <button className="back-button" onClick={() => reset('welcome')}>
                 <ArrowLeft size={15} strokeWidth={2} /> Back
               </button>
               <h2>Create Account</h2>
-            </motion.div>
+            </div>
 
             <form onSubmit={handleSignup} className="auth-form">
               {error && (
-                <motion.div
-                  className="error-message"
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <span className="error-icon"><AlertTriangle size={14} strokeWidth={2} /></span>
-                  {error}
+                <motion.div className="error-message" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+                  <AlertTriangle size={14} strokeWidth={2} /> {error}
                 </motion.div>
               )}
 
-              <motion.div 
-                className="form-group"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.1 }}
-              >
+              <div className="form-group">
                 <label htmlFor="signup-name">Full Name</label>
-                <input
-                  id="signup-name"
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="John Smith"
-                  required
-                />
-              </motion.div>
+                <input id="signup-name" type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Flight Lieutenant Mensah" required autoComplete="name" />
+              </div>
 
-              <motion.div 
-                className="form-group"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.15 }}
-              >
-                <label htmlFor="signup-email">Email</label>
-                <input
-                  id="signup-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="john@example.com"
-                  required
-                />
-              </motion.div>
+              <div className="form-group">
+                <label htmlFor="signup-email">Email Address</label>
+                <input id="signup-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" required autoComplete="email" />
+              </div>
 
-              <motion.div 
-                className="form-group"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                <label htmlFor="signup-username">Username</label>
-                <input
-                  id="signup-username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="johnsmith"
-                  required
-                />
-              </motion.div>
-
-              <motion.div 
-                className="form-group"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.25 }}
-              >
+              <div className="form-group">
                 <label htmlFor="signup-password">Password</label>
                 <div className="password-input-wrapper">
-                  <input
-                    id="signup-password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 6 characters"
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    onClick={() => setShowPassword(!showPassword)}
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
+                  <input id="signup-password" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" required autoComplete="new-password" />
+                  <button type="button" className="password-toggle" onClick={() => setShowPassword(v => !v)} title={showPassword ? 'Hide' : 'Show'}>
                     {showPassword ? <EyeOff size={16} strokeWidth={2} /> : <Eye size={16} strokeWidth={2} />}
                   </button>
                 </div>
-              </motion.div>
+              </div>
 
-              <motion.div 
-                className="form-group"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-              >
+              <div className="form-group">
                 <label htmlFor="signup-confirm">Confirm Password</label>
                 <div className="password-input-wrapper">
-                  <input
-                    id="signup-confirm"
-                    type={showPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm your password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    onClick={() => setShowPassword(!showPassword)}
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff size={16} strokeWidth={2} /> : <Eye size={16} strokeWidth={2} />}
-                  </button>
+                  <input id="signup-confirm" type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Repeat your password" required autoComplete="new-password" />
                 </div>
-              </motion.div>
+              </div>
 
-              <motion.button
-                type="submit"
-                className="btn btn-primary btn-block"
-                disabled={loading}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.35 }}
-              >
-                {loading ? (
-                  <span className="loading-spinner"><Loader2 size={16} strokeWidth={2} /> Creating account...</span>
-                ) : (
-                  'Create Account'
-                )}
+              <motion.button type="submit" className="btn btn-primary btn-block" disabled={loading} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                {loading ? <><Loader2 size={16} strokeWidth={2} className="spin" /> Creating account...</> : 'Create Account'}
               </motion.button>
 
-              <motion.p 
-                className="auth-switch"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-              >
+              <p className="auth-switch">
                 Already have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode('login');
-                    setError('');
-                  }}
-                  className="link-button"
-                >
-                  Log In
-                </button>
-              </motion.p>
+                <button type="button" className="link-button" onClick={() => reset('login')}>Log in</button>
+              </p>
             </form>
           </motion.div>
         )}

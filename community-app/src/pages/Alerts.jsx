@@ -1,160 +1,123 @@
 import { useEffect, useState } from "react";
-import { db } from "../firebase";
-import {
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  where
-} from "firebase/firestore";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
-import { AlarmClock, CalendarDays, CircleCheckBig, ShieldAlert } from "lucide-react";
-import { mockAlerts } from "../utils/mockData";
+import { AlarmClock, CalendarDays, CircleCheckBig, RefreshCw, ShieldAlert } from "lucide-react";
+import { alertsApi } from "../services/api";
 import './Pages.css';
 
+const SEVERITY_VARIANT = { high: 'error', warning: 'warning', medium: 'warning', info: 'info', low: 'success' };
+const CARD_VARIANT = { high: 'error', warning: 'warning', medium: 'default', info: 'info', low: 'default' };
+
 export default function Alerts() {
-  const [alerts, setAlerts] = useState(mockAlerts);
-  const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState('all');
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [severityFilter, setSeverityFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active');
 
-  useEffect(() => {
-    // Use mock data instantly if Firebase is not configured
-    if (!db) {
-      return;
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      setAlerts(await alertsApi.getAll());
+    } catch (err) {
+      setError(err.message || 'Failed to load alerts.');
+    } finally {
+      setLoading(false);
     }
+  };
 
-  setLoading(true);
+  useEffect(() => { load(); }, []);
 
-    async function fetchAlerts() {
-      try {
-        const q = query(
-          collection(db, "alerts"),
-          orderBy("createdAt", "desc")
-        );
+  const filtered = alerts.filter(a => {
+    const matchSeverity = severityFilter === 'all' || a.severity === severityFilter;
+    const matchStatus = statusFilter === 'all' || a.status === statusFilter;
+    return matchSeverity && matchStatus;
+  });
 
-        const querySnapshot = await getDocs(q);
+  const activeCount = alerts.filter(a => a.status === 'active').length;
 
-        const data = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+  if (loading) return (
+    <div className="page-container">
+      <div className="loading-state"><div className="loading-spinner"></div><p>Loading alerts...</p></div>
+    </div>
+  );
 
-        setAlerts(data.length > 0 ? data : mockAlerts);
-      } catch (error) {
-        console.error("Error fetching alerts:", error);
-        // Fall back to mock data on error
-        setAlerts(mockAlerts);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchAlerts();
-  }, []);
-
-  const filteredAlerts = filter === 'all' 
-    ? alerts 
-    : alerts.filter(alert => alert.severity === filter);
-
-  if (loading) {
-    return (
-      <div className="page-container">
-        <div className="loading-state">
-          <div className="loading-spinner"></div>
-          <p>Loading alerts...</p>
-        </div>
-      </div>
-    );
-  }
+  if (error) return (
+    <div className="page-container">
+      <div className="error-banner">{error} <button className="retry-btn" onClick={load}>Retry</button></div>
+    </div>
+  );
 
   return (
     <div className="page-container">
-      {/* Page Header */}
       <div className="page-header">
         <div className="page-title-wrapper">
           <h1 className="page-title">
-            <span className="page-icon"><ShieldAlert size={34} strokeWidth={2} /></span>
+            <span className="page-icon"><ShieldAlert size={30} strokeWidth={2} /></span>
             Emergency Alerts
           </h1>
-          <p className="page-subtitle">
-            Critical updates and emergency notifications for the community
-          </p>
+          <p className="page-subtitle">Critical updates and emergency notifications for the community</p>
         </div>
-        <Badge variant="error" size="lg" dot>{alerts.length} Active</Badge>
+        <div className="page-header-actions">
+          <Badge variant="error" size="lg" dot>{activeCount} Active</Badge>
+          <button className="icon-btn" onClick={load} title="Refresh"><RefreshCw size={16} /></button>
+        </div>
       </div>
 
-      {/* Filter Buttons */}
-      <div className="filter-bar">
-        <button 
-          className={`filter-btn ${filter === 'all' ? 'filter-btn-active' : ''}`}
-          onClick={() => setFilter('all')}
-        >
-          All Alerts ({alerts.length})
-        </button>
-        <button 
-          className={`filter-btn ${filter === 'high' ? 'filter-btn-active' : ''}`}
-          onClick={() => setFilter('high')}
-        >
-          High ({alerts.filter(a => a.severity === 'high').length})
-        </button>
-        <button 
-          className={`filter-btn ${filter === 'warning' ? 'filter-btn-active' : ''}`}
-          onClick={() => setFilter('warning')}
-        >
-          Warning ({alerts.filter(a => a.severity === 'warning').length})
-        </button>
-        <button 
-          className={`filter-btn ${filter === 'info' ? 'filter-btn-active' : ''}`}
-          onClick={() => setFilter('info')}
-        >
-          Info ({alerts.filter(a => a.severity === 'info').length})
-        </button>
+      <div className="filter-row">
+        <div className="filter-bar">
+          {['all', 'high', 'warning', 'medium', 'info', 'low'].map(s => (
+            <button key={s} className={`filter-btn ${severityFilter === s ? 'filter-btn-active' : ''}`} onClick={() => setSeverityFilter(s)}>
+              {s === 'all' ? `All (${alerts.length})` : `${s.charAt(0).toUpperCase() + s.slice(1)} (${alerts.filter(a => a.severity === s).length})`}
+            </button>
+          ))}
+        </div>
+        <div className="filter-bar">
+          {['active', 'resolved', 'all'].map(s => (
+            <button key={s} className={`filter-btn filter-btn-sm ${statusFilter === s ? 'filter-btn-active' : ''}`} onClick={() => setStatusFilter(s)}>
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Alerts List */}
       <div className="content-list">
-        {filteredAlerts.length === 0 ? (
+        {filtered.length === 0 ? (
           <Card padding="lg">
             <div className="empty-state">
               <span className="empty-icon"><CircleCheckBig size={46} strokeWidth={2} /></span>
               <h3>No Alerts</h3>
-              <p>{filter === 'all' ? 'No active alerts at this time. All clear!' : `No ${filter} severity alerts.`}</p>
+              <p>{severityFilter === 'all' && statusFilter === 'active' ? 'No active alerts. All clear!' : 'No alerts match the selected filters.'}</p>
             </div>
           </Card>
         ) : (
-          filteredAlerts.map(alert => (
-            <Card 
-              key={alert.id} 
-              hover 
-              padding="lg" 
-              variant={alert.severity === 'high' ? 'error' : alert.severity === 'warning' ? 'warning' : 'info'}
-              className="alert-card"
-            >
+          filtered.map(alert => (
+            <Card key={alert.id} hover padding="lg" variant={CARD_VARIANT[alert.severity] || 'default'} className="alert-card">
               <div className="alert-card-header">
-                <Badge 
-                  variant={alert.severity === 'high' ? 'error' : alert.severity === 'warning' ? 'warning' : 'info'} 
-                  size="md"
-                  dot
-                >
-                  {alert.severity?.toUpperCase()}
-                </Badge>
+                <div className="alert-badges">
+                  <Badge variant={SEVERITY_VARIANT[alert.severity] || 'default'} size="sm" dot>
+                    {alert.severity?.toUpperCase()}
+                  </Badge>
+                  <Badge variant={alert.status === 'active' ? 'success' : 'gray'} size="sm">
+                    {alert.status === 'active' ? 'Active' : 'Resolved'}
+                  </Badge>
+                </div>
                 <span className="alert-date">
-                  <CalendarDays size={14} strokeWidth={2} /> {alert.createdAt instanceof Date ? alert.createdAt.toLocaleDateString() : alert.createdAt?.toDate?.().toLocaleDateString() || 'Recent'}
+                  <CalendarDays size={13} strokeWidth={2} />
+                  {alert.created_at ? new Date(alert.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent'}
                 </span>
               </div>
               <h3 className="alert-title">{alert.title}</h3>
               <p className="alert-message">{alert.message}</p>
-              <div className="alert-footer">
-                <Badge variant="gray" size="sm">
-                  {alert.status === 'active' ? 'Active' : 'Resolved'}
-                </Badge>
-                {alert.expiresAt && (
+              {alert.expires_at && (
+                <div className="alert-footer">
                   <span className="alert-expires">
-                    <AlarmClock size={14} strokeWidth={2} /> Expires: {alert.expiresAt instanceof Date ? alert.expiresAt.toLocaleDateString() : alert.expiresAt?.toDate?.().toLocaleDateString()}
+                    <AlarmClock size={13} strokeWidth={2} />
+                    Expires: {new Date(alert.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
-                )}
-              </div>
+                </div>
+              )}
             </Card>
           ))
         )}

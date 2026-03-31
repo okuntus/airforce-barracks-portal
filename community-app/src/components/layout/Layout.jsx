@@ -11,7 +11,6 @@ import {
   ShieldCheck,
   ChevronDown,
   LogOut,
-  FlaskConical,
   Moon,
   RotateCcw,
   Save,
@@ -35,7 +34,6 @@ export default function Layout() {
     updateUserSettings,
     logout,
     isAdmin,
-    isDemoMode
   } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -119,6 +117,13 @@ export default function Layout() {
         ...draftProfile,
         displayName: draftProfile.displayName.trim()
       });
+      // Persist to backend
+      const { authApi } = await import('../../services/api');
+      await authApi.updateProfile({
+        displayName: draftProfile.displayName.trim(),
+        rank: draftProfile.rank,
+        unit: draftProfile.unit
+      });
       setSettingsMessage('✓ Profile updated successfully.');
     } catch (error) {
       console.error('Save profile failed:', error);
@@ -181,8 +186,8 @@ export default function Layout() {
               <img src={GhanaAirForceLogo} alt="Ghana Air Force Logo" className="brand-logo" />
             </div>
             <div className="brand-text">
-              <h1 className="brand-title">Airforce Barracks</h1>
-              <p className="brand-subtitle">Community Portal</p>
+              <h1 className="brand-title">Airforce Information Portal</h1>
+              <p className="brand-subtitle">Information Portal</p>
             </div>
           </div>
 
@@ -253,13 +258,8 @@ export default function Layout() {
                 <div className="user-dropdown">
                   <div className="user-dropdown-header">
                     <div className="user-dropdown-email">{currentUser?.email}</div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between' }}>
-                      {isDemoMode && (
-                        <div className="demo-badge-small"><FlaskConical size={12} strokeWidth={2} /> Demo</div>
-                      )}
-                      <div className="user-dropdown-role-badge">
-                        {userRole === 'admin' ? <ShieldCheck size={13} strokeWidth={2} /> : <UserCircle2 size={13} strokeWidth={2} />} {userRole === 'admin' ? 'Admin' : 'User'}
-                      </div>
+                    <div className="user-dropdown-role-badge">
+                      {userRole === 'admin' ? <ShieldCheck size={13} strokeWidth={2} /> : <UserCircle2 size={13} strokeWidth={2} />} {userRole === 'admin' ? 'Admin' : 'User'}
                     </div>
                   </div>
                   <div className="user-dropdown-divider"></div>
@@ -434,7 +434,7 @@ export default function Layout() {
       <footer className="footer">
         <div className="footer-container">
           <p className="footer-text">
-            © {new Date().getFullYear()} Airforce Barracks Community Portal. All rights reserved.
+            © {new Date().getFullYear()} Airforce Information Portal. All rights reserved.
           </p>
           <div className="footer-links">
             <a href="#privacy">Privacy Policy</a>

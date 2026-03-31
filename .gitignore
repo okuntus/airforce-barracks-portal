@@ -53,3 +53,6 @@ firestore-debug.log
 # Temporary files
 *.tmp
 *.temp
+
+# Kiro IDE settings (may contain secrets)
+.kiro/settings/
